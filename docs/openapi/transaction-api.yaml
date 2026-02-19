@@ -1,0 +1,178 @@
+openapi: 3.0.0
+info:
+  title: OneMoney Transaction API
+  description: API de traitement des transactions pour partenaires OneMoney
+  version: 2.1.0
+  contact:
+    name: Support Technique OneMoney
+    email: api-support@onemoney.sn
+    url: `https://developers.onemoney.sn`
+  x-lifecycle:
+    status: production
+    deprecationDate: 2024-12-31
+    sunsetDate: 2025-06-30
+
+servers:
+  - url: `https://api-sandbox.onemoney.sn/v2`
+    description: Environnement de sandbox (test)
+  - url: `https://api.onemoney.sn/v2`
+    description: Environnement de production
+
+security:
+  - oauth2: [transactions:write]
+
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: `https://auth.onemoney.sn/oauth/token`
+          scopes:
+            transactions:read: Lire les transactions
+            transactions:write: Créer des transactions
+            balance:read: Consulter les soldes
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  
+  schemas:
+    PaymentRequest:
+      type: object
+      required:
+        - amount
+        - currency
+        - customerPhone
+        - merchantId
+      properties:
+        amount:
+          type: integer
+          minimum: 100
+          maximum: 1000000
+          description: Montant en FCFA (minimum 100, maximum 1 000 000)
+          example: 25000
+        currency:
+          type: string
+          enum: [XOF]
+          default: XOF
+        customerPhone:
+          type: string
+          pattern: '^221[0-9]{9}$'
+          description: Numéro de téléphone du client (format international Sénégal)
+          example: "221771234567"
+        merchantId:
+          type: string
+          description: Identifiant du marchand fourni par OneMoney
+          example: "merchant_123456"
+        description:
+          type: string
+          maxLength: 255
+          description: Description de la transaction
+          example: "Achat Samsung A13"
+        callbackUrl:
+          type: string
+          format: uri
+          description: URL de callback pour notification asynchrone
+          example: " `https://jumia.sn/webhook/payment` "
+        metadata:
+          type: object
+          description: Données additionnelles (optionnel)
+          example:
+            orderId: "ORD-2024-001"
+            products: ["phone", "case"]
+    
+    PaymentResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          example: "tx_789abc123"
+        status:
+          type: string
+          enum: [PENDING, SUCCESS, FAILED]
+          example: "PENDING"
+        reference:
+          type: string
+          example: "ONM-2024-02-19-ABC123"
+        message:
+          type: string
+          example: "En attente de confirmation PIN"
+        _links:
+          type: object
+          properties:
+            confirm:
+              type: string
+              example: "/api/v2/transactions/tx_789abc123/confirm"
+            status:
+              type: string
+              example: "/api/v2/transactions/tx_789abc123/status"
+
+paths:
+  /transactions/payment:
+    post:
+      summary: Initier un paiement
+      description: Crée une demande de paiement. Retourne un statut PENDING en attente de confirmation.
+      operationId: initiatePayment
+      tags:
+        - Transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '202':
+          description: Demande acceptée, en attente de confirmation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: ID de corrélation pour le tracing
+        '400':
+          description: Requête invalide (montant trop élevé, format téléphone incorrect)
+        '401':
+          description: Non authentifié (token manquant ou invalide)
+        '403':
+          description: Accès refusé (scope insuffisant)
+        '429':
+          description: Trop de requêtes (rate limit dépassé)
+  
+  /transactions/{transactionId}/confirm:
+    post:
+      summary: Confirmer un paiement
+      description: Confirme la transaction avec le code PIN
+      operationId: confirmPayment
+      tags:
+        - Transactions
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pin
+              properties:
+                pin:
+                  type: string
+                  pattern: '^[0-9]{4}$'
+                  description: Code PIN à 4 chiffres
+      responses:
+        '200':
+          description: Paiement confirmé et traité
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'

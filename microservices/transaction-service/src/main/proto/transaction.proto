@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package onemoney.transaction;
+
+option java_package = "sn.onemoney.transaction.grpc";
+option java_multiple_files = true;
+
+service TransactionService {
+  rpc ProcessPayment (PaymentRequest) returns (PaymentResponse);
+  rpc GetBalance (BalanceRequest) returns (BalanceResponse);
+  rpc StreamTransactions (TransactionStreamRequest) returns (stream Transaction);
+}
+
+message PaymentRequest {
+  string transactionId = 1;
+  string debitorPhone = 2;
+  string creditorId = 3;
+  int64 amount = 4;
+  string currency = 5;
+  string description = 6;
+}
+
+message PaymentResponse {
+  string status = 1;
+  string reference = 2;
+  int64 timestamp = 3;
+  string message = 4;
+}
+
+message BalanceRequest {
+  string phoneNumber = 1;
+}
+
+message BalanceResponse {
+  string phoneNumber = 1;
+  int64 balance = 2;
+  string currency = 3;
+  int64 lastUpdated = 4;
+}
+
+message TransactionStreamRequest {
+  string phoneNumber = 1;
+  int32 limit = 2;
+}
+
+message Transaction {
+  string id = 1;
+  string type = 2;
+  int64 amount = 3;
+  string status = 4;
+  int64 timestamp = 5;
+  string counterparty = 6;
+}
